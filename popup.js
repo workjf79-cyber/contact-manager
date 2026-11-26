@@ -1,0 +1,116 @@
+const $=id=>document.getElementById(id);let contacts=[];let awaiting="";
+function remind(show=false){ $("reminder").textContent=show&&awaiting?`Mensagem copiada para @${awaiting}. Confirma como Contactado ou Ignorado antes de trocar de perfil.`:"";}
+function canSwitch(u){if(awaiting&&u.toLowerCase()!==awaiting.toLowerCase()){remind(true);$("msgresult").textContent="Resolve primeiro o contacto anterior.";return false;}return true;}
+function followerNumber(value){
+ if(value===null||value===undefined||value==="") return null;
+ let s=String(value).toUpperCase().replace(/\s/g,"").replace(/FOLLOWERS?|SEGUIDORES?/g,"");
+ let mult=1;if(s.endsWith("K")){mult=1000;s=s.slice(0,-1);}else if(s.endsWith("M")){mult=1000000;s=s.slice(0,-1);}else if(s.endsWith("B")){mult=1000000000;s=s.slice(0,-1);}
+ if(mult===1){s=s.replace(/\./g,"").replace(/,/g,"");}
+ else s=s.replace(",",".");
+ let n=Number(s);return Number.isFinite(n)?Math.round(n*mult):null;
+}
+function eligible(x){let n=followerNumber(x.followers);return n!==null&&n>60000;}
+function purgeLow(){contacts=contacts.filter(x=>{const n=followerNumber(x.followers);return n===null||n>60000||x.reviewState==="contacted";});}
+function refreshStatuses(){for(const x of contacts)x.status=eligible(x)?(x.reviewState||"pending"):"ignorar";}
+async function save(){}
+function render(){
+ $("totalStat").textContent=contacts.length;
+ $("pendingStat").textContent=contacts.filter(x=>eligible(x)&&(!x.reviewState||x.reviewState==="pending")).length;
+ $("contactedStat").textContent=contacts.filter(x=>x.reviewState==="contacted").length;
+ $("ignoredStat").textContent=contacts.filter(x=>!eligible(x)||x.reviewState==="skipped").length;
+ const remaining=contacts.filter(x=>eligible(x)&&(!x.reviewState||x.reviewState==="pending")).length;
+ $("lowStock").textContent=remaining===0?"Sem contactos pendentes. Recolhe novos perfis.":remaining<=5?`Atenção: restam ${remaining} contactos pendentes.`:"";
+ refreshStatuses();
+ let q=$("search").value.toLowerCase().replace("@","");
+ let eligibleCount=contacts.filter(eligible).length;
+ let showOnly=$("eligibleOnly").checked;
+ $("historyCount").textContent=`${contacts.filter(x=>eligible(x)&&x.status==="pending").length} pendentes · ${contacts.filter(x=>x.reviewState==="contacted").length} contactados · ${contacts.filter(x=>x.reviewState==="skipped").length} ignorados manualmente`;
+ let a=contacts.filter(x=>($("stateFilter").value==="all"||x.status===$("stateFilter").value)&&(!showOnly||eligible(x))&&x.username.toLowerCase().includes(q));
+ $("count").textContent=a.length;
+ $("filterCount").textContent=`${eligibleCount} acima de 60.000 · ${contacts.length-eligibleCount} ignorados (abaixo de 60.001 ou sem número identificado).`;
+ $("list").innerHTML="";
+ if($("sort").value!=="recent")a.sort((x,y)=>($("sort").value==="desc"?-1:1)*((followerNumber(x.followers)||0)-(followerNumber(y.followers)||0)));
+ a.forEach(x=>{let d=document.createElement("div");d.className="item";let s=document.createElement("span");s.textContent="@"+x.username+(x.followers?" · "+x.followers+" seguidores":" · sem número")+" · "+({pending:"Pendente",contacted:"Contactado",skipped:"Ignorado",ignorar:"Não elegível"}[x.status]||x.status);let b=document.createElement("button");b.textContent="Usar";b.disabled=!eligible(x);b.style.opacity=eligible(x)?"1":".45";b.onclick=()=>{if(!canSwitch(x.username))return;$("user").value=x.username;$("name").value=suggestedName(x.username);preview();if(innerWidth<=850)document.querySelector(".message").scrollIntoView({behavior:"smooth"});};if(x.reviewedAt){let date=document.createElement("small");date.textContent="Atualizado: "+new Date(x.reviewedAt).toLocaleString("pt-PT");s.append(document.createElement("br"),date);}d.append(s,b);$("list").append(d);});
+}
+function suggestedName(u){let m=u.match(/^([a-zA-Z]{2,})[._][a-zA-Z]{2,}/);return m?m[1][0].toUpperCase()+m[1].slice(1).toLowerCase():"";}
+function message(u){let n=$("name").value.trim();let t=$("template").value;return (n?t.replaceAll("{nome}",n):t.replaceAll(", {nome}","").replaceAll("{nome}","")).replaceAll("{username}",u);}
+function preview(){let u=$("user").value.replace(/^@/,"").trim();$("preview").textContent=u?message(u):"Escreve ou seleciona um username.";}
+$("search").oninput=render;$("eligibleOnly").onchange=render;$("user").oninput=()=>{if(!canSwitch($("user").value.replace(/^@/,"").trim())){$("user").value=awaiting;return;}$("name").value=suggestedName($("user").value.replace(/^@/,"").trim());preview();};$("name").oninput=preview;$("template").oninput=async()=>{await save();preview();};
+$("copy").onclick=async()=>{let u=$("user").value.replace(/^@/,"").trim();if(!u){$("msgresult").textContent="Indica um username.";return;}let target=contacts.find(x=>x.username.toLowerCase()===u.toLowerCase());if(!target||!eligible(target)||target.reviewState==="contacted"||target.reviewState==="skipped"){$("msgresult").textContent="Perfil não elegível ou já tratado. Revê o estado antes de continuar.";return;}if(!canSwitch(u))return;try{await navigator.clipboard.writeText(message(u));}catch(e){$("msgresult").textContent="Não foi possível copiar. Seleciona o texto manualmente.";return;}awaiting=u;remind();$("msgresult").textContent="Mensagem copiada para colares manualmente."};
+$("open").onclick=()=>{let u=$("user").value.replace(/^@/,"").trim();let target=contacts.find(x=>x.username.toLowerCase()===u.toLowerCase());if(!target||!eligible(target)||target.reviewState==="contacted"||target.reviewState==="skipped"){$("msgresult").textContent="Perfil não elegível ou já tratado. Revê o estado antes de continuar.";return;}if(u)window.open("https://www.instagram.com/"+encodeURIComponent(u)+"/","_blank","noopener");};
+$("csv").onclick=()=>{let rows=[["username","followers","status","added_at"],...contacts.map(x=>[x.username,x.followers||"",x.reviewState,x.addedAt])];let csv=rows.map(r=>r.map(v=>'"'+String(v??"").replaceAll('"','""')+'"').join(",")).join("\r\n");let url=URL.createObjectURL(new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}));let a=document.createElement("a");a.href=url;a.download="contactos-instagram.csv";a.click();URL.revokeObjectURL(url);};
+$("stateFilter").onchange=render;
+for(const state of ["contacted","skipped","pending"]){
+ $(""+state).onclick=async()=>{
+ let u=$("user").value.replace(/^@/,"").trim().toLowerCase();
+ let x=contacts.find(c=>c.username.toLowerCase()===u);
+ if(!x||!eligible(x)){ $("msgresult").textContent="Seleciona um perfil elegível.";return;}
+ if(state==="contacted"&&x.reviewState==="contacted"){ $("msgresult").textContent="Este perfil já está contactado.";return;}
+ try{await api("contacts?username=eq."+encodeURIComponent(u),{method:"PATCH",body:JSON.stringify({status:state,updated_at:new Date().toISOString()}),headers:{Prefer:"return=representation"}}).then(rows=>{if(rows.length!==1)throw Error("Contacto não atualizado")});}catch(e){$("msgresult").textContent=e.message;return;}x.reviewState=state;x.reviewedAt=new Date().toISOString();
+ if(state==="contacted"||state==="skipped"){if(awaiting.toLowerCase()===u){awaiting="";remind();}$("stateFilter").value="pending";$("user").value="";$("name").value="";preview();}
+ refreshStatuses();await save();render();
+ $("msgresult").textContent="Estado guardado: "+({contacted:"Contactado",skipped:"Ignorado",pending:"Pendente"}[state]);
+ };
+}
+$("sort").onchange=render;
+
+const base="https://fxjcjotjvcsduugxqjbd.supabase.co",key="sb_publishable_btMb2nbwSzN6k6JwrGRkGw_R-iZJRv9";
+let session=null, timer=null, busy=false;
+let templateDirty=false;
+$("template").addEventListener("input",()=>{templateDirty=true;});
+const status=s=>$("cloudstatus").textContent=s;
+async function api(path,opts={}){
+ if(!session)throw Error("Inicia sessão.");
+ const r=await fetch(base+"/rest/v1/"+path,{...opts,headers:{apikey:key,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json",...opts.headers}});
+ if(!r.ok)throw Error("Erro de sincronização: HTTP "+r.status);
+ const body=await r.text();
+ return body.trim()?JSON.parse(body):null;
+}
+async function pull(){
+ if(!session||busy)return;busy=true;
+ try{
+ let rows=[],offset=0;
+ while(true){let batch=await api("contacts?select=*&order=username&limit=500&offset="+offset);rows.push(...batch);if(batch.length<500)break;offset+=500;}
+ contacts=rows.map(x=>({username:x.username,followers:x.followers,reviewState:x.status,addedAt:x.added_at,reviewedAt:x.updated_at}));
+ if(awaiting&&contacts.some(x=>x.username===awaiting.toLowerCase()&&x.reviewState!=="pending")){awaiting="";remind();}
+ if(!templateDirty){const settings=await api("contact_settings?select=message_template");if(settings.length&&!templateDirty&&$("template").value!==settings[0].message_template){$("template").value=settings[0].message_template;preview();}}
+ render();status("Sincronizado · "+new Date().toLocaleTimeString("pt-PT"));
+ }catch(e){status(e.message);}finally{busy=false;}
+}
+$("login").onsubmit=async e=>{e.preventDefault();try{
+ const r=await fetch(base+"/auth/v1/token?grant_type=password",{method:"POST",headers:{apikey:key,"Content-Type":"application/json"},body:JSON.stringify({email:$("email").value,password:$("password").value})});
+ const d=await r.json();if(!r.ok||!d.access_token)throw Error("Login recusado.");
+ session=d;$("password").value="";$("login").hidden=true;$("logout").hidden=false;$("workspace").hidden=false;
+ const settings=await api("contact_settings?select=message_template");if(settings[0]?.message_template)$("template").value=settings[0].message_template;
+ await pull();timer=setInterval(pull,10000);
+ }catch(e){status(e.message);}};
+$("logout").onclick=()=>{clearInterval(timer);session=null;contacts=[];awaiting="";location.reload();};
+async function insert(rows){
+ const unique=[...new Map(rows.map(x=>[x.username.toLowerCase(),x])).values()];
+ let added=0;
+ for(let i=0;i<unique.length;i+=100){
+ const result=await api("contacts?on_conflict=user_id,username",{method:"POST",headers:{Prefer:"resolution=ignore-duplicates,return=representation"},body:JSON.stringify(unique.slice(i,i+100))});
+ if(!Array.isArray(result))throw Error("Resposta sem confirmação de escrita. Atualiza a lista antes de repetir.");
+ added+=result.length;
+ }
+ while(busy)await new Promise(resolve=>setTimeout(resolve,100));
+ await pull();
+ return {added,duplicates:unique.length-added};
+}
+function importSummary(r){return `${r.added} novos · ${r.duplicates} repetidos (preservados).`;}
+$("add").onsubmit=async e=>{e.preventDefault();try{
+ const username=$("newuser").value.trim().replace(/^@/,"").toLowerCase(),followers=$("followers").value.trim();
+ if(!/^[a-z0-9._]{2,30}$/.test(username)||!eligible({followers}))throw Error("Username inválido ou seguidores insuficientes.");
+ const r=await insert([{username,followers,status:"pending"}]);$("result").textContent=importSummary(r);$("add").reset();
+ }catch(e){$("result").textContent=e.message;}};
+$("saveTemplate").onclick=async()=>{try{await api("contact_settings?on_conflict=user_id",{method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({user_id:session.user.id,message_template:$("template").value})});templateDirty=false;status("Modelo guardado.");}catch(e){status(e.message);}};
+$("import").onchange=async()=>{try{
+ const file=$("import").files[0];if(!file)return;
+ const lines=(await file.text()).replace(/^\uFEFF/,"").split(/\r?\n/);
+ if(!/^"?username"?,"?followers"?,/.test(lines[0]))throw Error("CSV incompatível");
+ const rows=[];for(const line of lines.slice(1)){const m=line.match(/^"([a-zA-Z0-9._]+)","([^"]*)","([^"]*)","([^"]*)"$/);if(!m)continue;const [,u,followers,s,date]=m;if(!eligible({followers})&&s!=="contacted")continue;rows.push({username:u.toLowerCase(),followers,status:["contacted","skipped"].includes(s)?s:"pending",...(Number.isFinite(Date.parse(date))?{added_at:new Date(date).toISOString()}:{})});}
+ const r=await insert(rows);$("result").textContent=importSummary(r);
+ }catch(e){$("result").textContent=e.message;}finally{$("import").value="";}};
+if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
+
+$("mobileImport").onclick=async()=>{const b=$("mobileImport");b.disabled=true;try{if(!session)throw Error("Inicia sessão.");const rows=new Map();for(const line of $("mobileRows").value.split(/\r?\n/)){const m=line.trim().match(/^@?([a-zA-Z0-9._]{2,30})[,;\t ]+([0-9]+(?:[.,][0-9]+)?[kKmMbB]?)$/);if(!m||!eligible({followers:m[2]}))continue;const username=m[1].toLowerCase();rows.set(username,{username,followers:m[2],status:"pending"});}if(!rows.size)throw Error("Nenhum perfil elegível na lista.");if(!confirm("Importar "+rows.size+" perfis elegíveis? Os contactos existentes serão preservados."))return;const r=await insert([...rows.values()]);$("result").textContent=importSummary(r);$("mobileRows").value="";}catch(e){$("result").textContent=e.message;}finally{b.disabled=false;}};
