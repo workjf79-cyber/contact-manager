@@ -1,1 +1,1 @@
-Cloud 3.6 Mobile: carregar os ficheiros na pasta existente do GitHub. Adição e importação apenas na extensão PC; esta interface permite consultar e tratar contactos. Não altera permissões do Supabase.
+Cloud 3.7 Mobile. Carregar os ficheiros na pasta existente. Primeiro login necessário; sessão renovada localmente. Não guardar palavras-passe. Sair em dispositivos partilhados.
