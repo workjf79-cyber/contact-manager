@@ -103,3 +103,5 @@ $("import").onchange=async()=>{try{
  await insert(rows);$("result").textContent=rows.length+" linhas processadas (duplicados preservados).";
  }catch(e){$("result").textContent=e.message;}finally{$("import").value="";}};
 if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
+
+$("mobileImport").onclick=async()=>{const b=$("mobileImport");b.disabled=true;try{if(!session)throw Error("Inicia sessão.");const rows=new Map();for(const line of $("mobileRows").value.split(/\r?\n/)){const m=line.trim().match(/^@?([a-zA-Z0-9._]{2,30})[,;\t ]+([0-9]+(?:[.,][0-9]+)?[kKmMbB]?)$/);if(!m||!eligible({followers:m[2]}))continue;const username=m[1].toLowerCase();rows.set(username,{username,followers:m[2],status:"pending"});}if(!rows.size)throw Error("Nenhum perfil elegível na lista.");if(!confirm("Importar "+rows.size+" perfis elegíveis? Os contactos existentes serão preservados."))return;await insert([...rows.values()]);$("result").textContent=rows.size+" perfis processados (duplicados preservados).";$("mobileRows").value="";}catch(e){$("result").textContent=e.message;}finally{b.disabled=false;}};
