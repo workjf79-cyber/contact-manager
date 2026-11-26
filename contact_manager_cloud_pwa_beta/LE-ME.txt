@@ -1,1 +1,1 @@
-Cloud 3.8 Mobile. Carregar os ficheiros na pasta existente. Mantém a sessão da 3.7. Após confirmar manualmente ou ignorar, seleciona o próximo pendente pela ordenação escolhida, independentemente da pesquisa. O envio continua manual.
+Cloud 3.9 Mobile. Carregar os ficheiros na pasta existente. Mantém a sessão da 3.7. Após confirmar manualmente ou ignorar, seleciona o próximo pendente pela ordenação escolhida, independentemente da pesquisa. O envio continua manual.

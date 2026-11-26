@@ -1,5 +1,5 @@
-const cache='contact-manager-cloud-v38';
-const assets=['./index.html','./style-v38.css','./popup-v38.js','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
+const cache='contact-manager-cloud-v39';
+const assets=['./index.html','./style-v39.css','./popup-v39.js','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',e=>e.waitUntil((async()=>{const c=await caches.open(cache);await Promise.all(assets.map(async a=>{const r=await fetch(a,{cache:'reload'});if(!r.ok)throw Error('Asset unavailable');await c.put(a,r);}));await self.skipWaiting();})()));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const k of await caches.keys())if(k.startsWith('contact-manager-cloud-')&&k!==cache)await caches.delete(k);await self.clients.claim();})()));
 self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(e.request.method!=='GET'||u.origin!==self.location.origin||!u.pathname.startsWith(new URL(self.registration.scope).pathname))return;e.respondWith((async()=>{try{return await fetch(e.request,{cache:'no-store'});}catch{const c=await caches.open(cache);return (await c.match(e.request.mode==='navigate'?'./index.html':e.request))||Response.error();}})());});
