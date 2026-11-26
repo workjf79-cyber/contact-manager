@@ -38,7 +38,7 @@ function preview(){let u=$("user").value.replace(/^@/,"").trim();$("preview").te
 $("search").oninput=render;$("eligibleOnly").onchange=render;$("user").oninput=()=>{if(!canSwitch($("user").value.replace(/^@/,"").trim())){$("user").value=awaiting;return;}$("name").value=suggestedName($("user").value.replace(/^@/,"").trim());preview();};$("name").oninput=preview;$("template").oninput=async()=>{await save();preview();};
 $("copy").onclick=async()=>{let u=$("user").value.replace(/^@/,"").trim();if(!u){$("msgresult").textContent="Indica um username.";return;}let target=contacts.find(x=>x.username.toLowerCase()===u.toLowerCase());if(!target||!eligible(target)||target.reviewState==="contacted"||target.reviewState==="skipped"){$("msgresult").textContent="Perfil não elegível ou já tratado. Revê o estado antes de continuar.";return;}if(!canSwitch(u))return;try{await navigator.clipboard.writeText(message(u));}catch(e){$("msgresult").textContent="Não foi possível copiar. Seleciona o texto manualmente.";return;}awaiting=u;remind();$("msgresult").textContent="Mensagem copiada para colares manualmente."};
 $("open").onclick=()=>{let u=$("user").value.replace(/^@/,"").trim();let target=contacts.find(x=>x.username.toLowerCase()===u.toLowerCase());if(!target||!eligible(target)||target.reviewState==="contacted"||target.reviewState==="skipped"){$("msgresult").textContent="Perfil não elegível ou já tratado. Revê o estado antes de continuar.";return;}if(u)window.open("https://www.instagram.com/"+encodeURIComponent(u)+"/","_blank","noopener");};
-$("csv").onclick=()=>{let rows=[["username","followers","status","added_at"],...contacts.map(x=>[x.username,x.followers||"",x.status,x.addedAt])];let csv=rows.map(r=>r.map(v=>'"'+String(v??"").replaceAll('"','""')+'"').join(",")).join("\r\n");let url=URL.createObjectURL(new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}));let a=document.createElement("a");a.href=url;a.download="contactos-instagram.csv";a.click();URL.revokeObjectURL(url);};
+$("csv").onclick=()=>{let rows=[["username","followers","status","added_at"],...contacts.map(x=>[x.username,x.followers||"",x.reviewState,x.addedAt])];let csv=rows.map(r=>r.map(v=>'"'+String(v??"").replaceAll('"','""')+'"').join(",")).join("\r\n");let url=URL.createObjectURL(new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}));let a=document.createElement("a");a.href=url;a.download="contactos-instagram.csv";a.click();URL.revokeObjectURL(url);};
 $("stateFilter").onchange=render;
 for(const state of ["contacted","skipped","pending"]){
  $(""+state).onclick=async()=>{
@@ -56,6 +56,8 @@ $("sort").onchange=render;
 
 const base="https://fxjcjotjvcsduugxqjbd.supabase.co",key="sb_publishable_btMb2nbwSzN6k6JwrGRkGw_R-iZJRv9";
 let session=null, timer=null, busy=false;
+let templateDirty=false;
+$("template").addEventListener("input",()=>{templateDirty=true;});
 const status=s=>$("cloudstatus").textContent=s;
 async function api(path,opts={}){
  if(!session)throw Error("Inicia sessão.");
@@ -70,6 +72,7 @@ async function pull(){
  while(true){let batch=await api("contacts?select=*&order=username&limit=500&offset="+offset);rows.push(...batch);if(batch.length<500)break;offset+=500;}
  contacts=rows.map(x=>({username:x.username,followers:x.followers,reviewState:x.status,addedAt:x.added_at,reviewedAt:x.updated_at}));
  if(awaiting&&contacts.some(x=>x.username===awaiting.toLowerCase()&&x.reviewState!=="pending")){awaiting="";remind();}
+ if(!templateDirty){const settings=await api("contact_settings?select=message_template");if(settings.length&&!templateDirty&&$("template").value!==settings[0].message_template){$("template").value=settings[0].message_template;preview();}}
  render();status("Sincronizado · "+new Date().toLocaleTimeString("pt-PT"));
  }catch(e){status(e.message);}finally{busy=false;}
 }
@@ -91,7 +94,7 @@ $("add").onsubmit=async e=>{e.preventDefault();try{
  if(!/^[a-z0-9._]{2,30}$/.test(username)||!eligible({followers}))throw Error("Username inválido ou seguidores insuficientes.");
  await insert([{username,followers,status:"pending"}]);$("result").textContent="Perfil registado ou já existente.";$("add").reset();
  }catch(e){$("result").textContent=e.message;}};
-$("saveTemplate").onclick=async()=>{try{await api("contact_settings?on_conflict=user_id",{method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({user_id:session.user.id,message_template:$("template").value})});status("Modelo guardado.");}catch(e){status(e.message);}};
+$("saveTemplate").onclick=async()=>{try{await api("contact_settings?on_conflict=user_id",{method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({user_id:session.user.id,message_template:$("template").value})});templateDirty=false;status("Modelo guardado.");}catch(e){status(e.message);}};
 $("import").onchange=async()=>{try{
  const file=$("import").files[0];if(!file)return;
  const lines=(await file.text()).replace(/^\uFEFF/,"").split(/\r?\n/);
