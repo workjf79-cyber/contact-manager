@@ -63,7 +63,8 @@ async function api(path,opts={}){
  if(!session)throw Error("Inicia sessão.");
  const r=await fetch(base+"/rest/v1/"+path,{...opts,headers:{apikey:key,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json",...opts.headers}});
  if(!r.ok)throw Error("Erro de sincronização: HTTP "+r.status);
- return r.status===204?null:r.json();
+ const body=await r.text();
+ return body.trim()?JSON.parse(body):null;
 }
 async function pull(){
  if(!session||busy)return;busy=true;
@@ -85,14 +86,22 @@ $("login").onsubmit=async e=>{e.preventDefault();try{
  }catch(e){status(e.message);}};
 $("logout").onclick=()=>{clearInterval(timer);session=null;contacts=[];awaiting="";location.reload();};
 async function insert(rows){
- if(!rows.length)return;
- for(let i=0;i<rows.length;i+=100)await api("contacts?on_conflict=user_id,username",{method:"POST",headers:{Prefer:"resolution=ignore-duplicates,return=minimal"},body:JSON.stringify(rows.slice(i,i+100))});
+ const unique=[...new Map(rows.map(x=>[x.username.toLowerCase(),x])).values()];
+ let added=0;
+ for(let i=0;i<unique.length;i+=100){
+ const result=await api("contacts?on_conflict=user_id,username",{method:"POST",headers:{Prefer:"resolution=ignore-duplicates,return=representation"},body:JSON.stringify(unique.slice(i,i+100))});
+ if(!Array.isArray(result))throw Error("Resposta sem confirmação de escrita. Atualiza a lista antes de repetir.");
+ added+=result.length;
+ }
+ while(busy)await new Promise(resolve=>setTimeout(resolve,100));
  await pull();
+ return {added,duplicates:unique.length-added};
 }
+function importSummary(r){return `${r.added} novos · ${r.duplicates} repetidos (preservados).`;}
 $("add").onsubmit=async e=>{e.preventDefault();try{
  const username=$("newuser").value.trim().replace(/^@/,"").toLowerCase(),followers=$("followers").value.trim();
  if(!/^[a-z0-9._]{2,30}$/.test(username)||!eligible({followers}))throw Error("Username inválido ou seguidores insuficientes.");
- await insert([{username,followers,status:"pending"}]);$("result").textContent="Perfil registado ou já existente.";$("add").reset();
+ const r=await insert([{username,followers,status:"pending"}]);$("result").textContent=importSummary(r);$("add").reset();
  }catch(e){$("result").textContent=e.message;}};
 $("saveTemplate").onclick=async()=>{try{await api("contact_settings?on_conflict=user_id",{method:"POST",headers:{Prefer:"resolution=merge-duplicates,return=minimal"},body:JSON.stringify({user_id:session.user.id,message_template:$("template").value})});templateDirty=false;status("Modelo guardado.");}catch(e){status(e.message);}};
 $("import").onchange=async()=>{try{
@@ -100,8 +109,8 @@ $("import").onchange=async()=>{try{
  const lines=(await file.text()).replace(/^\uFEFF/,"").split(/\r?\n/);
  if(!/^"?username"?,"?followers"?,/.test(lines[0]))throw Error("CSV incompatível");
  const rows=[];for(const line of lines.slice(1)){const m=line.match(/^"([a-zA-Z0-9._]+)","([^"]*)","([^"]*)","([^"]*)"$/);if(!m)continue;const [,u,followers,s,date]=m;if(!eligible({followers})&&s!=="contacted")continue;rows.push({username:u.toLowerCase(),followers,status:["contacted","skipped"].includes(s)?s:"pending",...(Number.isFinite(Date.parse(date))?{added_at:new Date(date).toISOString()}:{})});}
- await insert(rows);$("result").textContent=rows.length+" linhas processadas (duplicados preservados).";
+ const r=await insert(rows);$("result").textContent=importSummary(r);
  }catch(e){$("result").textContent=e.message;}finally{$("import").value="";}};
 if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
 
-$("mobileImport").onclick=async()=>{const b=$("mobileImport");b.disabled=true;try{if(!session)throw Error("Inicia sessão.");const rows=new Map();for(const line of $("mobileRows").value.split(/\r?\n/)){const m=line.trim().match(/^@?([a-zA-Z0-9._]{2,30})[,;\t ]+([0-9]+(?:[.,][0-9]+)?[kKmMbB]?)$/);if(!m||!eligible({followers:m[2]}))continue;const username=m[1].toLowerCase();rows.set(username,{username,followers:m[2],status:"pending"});}if(!rows.size)throw Error("Nenhum perfil elegível na lista.");if(!confirm("Importar "+rows.size+" perfis elegíveis? Os contactos existentes serão preservados."))return;await insert([...rows.values()]);$("result").textContent=rows.size+" perfis processados (duplicados preservados).";$("mobileRows").value="";}catch(e){$("result").textContent=e.message;}finally{b.disabled=false;}};
+$("mobileImport").onclick=async()=>{const b=$("mobileImport");b.disabled=true;try{if(!session)throw Error("Inicia sessão.");const rows=new Map();for(const line of $("mobileRows").value.split(/\r?\n/)){const m=line.trim().match(/^@?([a-zA-Z0-9._]{2,30})[,;\t ]+([0-9]+(?:[.,][0-9]+)?[kKmMbB]?)$/);if(!m||!eligible({followers:m[2]}))continue;const username=m[1].toLowerCase();rows.set(username,{username,followers:m[2],status:"pending"});}if(!rows.size)throw Error("Nenhum perfil elegível na lista.");if(!confirm("Importar "+rows.size+" perfis elegíveis? Os contactos existentes serão preservados."))return;const r=await insert([...rows.values()]);$("result").textContent=importSummary(r);$("mobileRows").value="";}catch(e){$("result").textContent=e.message;}finally{b.disabled=false;}};
