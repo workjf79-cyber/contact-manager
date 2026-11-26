@@ -1,1 +1,1 @@
-Cloud 3.5: carregar todos os ficheiros na pasta existente. Novo nome do JavaScript para evitar cache.
+Cloud 3.6 Mobile: carregar os ficheiros na pasta existente do GitHub. Adição e importação apenas na extensão PC; esta interface permite consultar e tratar contactos. Não altera permissões do Supabase.
