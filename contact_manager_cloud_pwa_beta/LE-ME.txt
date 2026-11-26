@@ -1,0 +1,1 @@
+Publicar os ficheiros numa hospedagem HTTPS. Android: Chrome > Instalar aplicação. iPhone: Safari > Partilhar > Adicionar ao ecrã principal. Importar CSV exportado pela extensão. Dados locais, sem sincronização. Exportar CSV para backup.
