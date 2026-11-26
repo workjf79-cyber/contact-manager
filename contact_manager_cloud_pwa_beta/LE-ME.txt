@@ -1,1 +1,1 @@
-Cloud 3.4 — substituir os ficheiros diretamente na pasta contact_manager_cloud_pwa_beta. Não carregar a pasta ZIP inteira. Mantém a base de dados existente. Testar importação de duplicado e de perfil novo.
+Cloud 3.5: carregar todos os ficheiros na pasta existente. Novo nome do JavaScript para evitar cache.
